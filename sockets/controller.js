@@ -1,16 +1,47 @@
+import { TicketControl } from "../models/ticket-control.js";
+
+const ticketControl = new TicketControl();
 
 export const socketController = (socket) => {
-  console.log('Cliente conectado', socket.id);
 
-  socket.on('disconnect', () => {
-    console.log('Cliente desconectado', socket.id);
+  socket.emit('last-ticket', ticketControl.last);
+  socket.emit('current-status', ticketControl.last4);
+
+  // 'pending-tickets'
+  socket.emit('pending-tickets', ticketControl.tickets.length);
+
+  socket.on('next-ticket', (payload, callback) => {
+    const next = ticketControl.next();
+
+    socket.emit('pending-tickets', ticketControl.tickets.length);
+
+    callback(next);
   });
 
-  socket.on('send-msg', (payload, callback) => {
-    const id = 123123;
-    callback(id);
+  socket.on('resolve-ticket', ({escritorio}, callback) => {
+    if (!escritorio) {
+      return callback({
+        ok: false,
+        msg: 'El escritorio es obligatorio'
+      })
+    }
 
-    // transmite el mensaje a todos los otros clientes menos a el mismo
-    socket.broadcast.emit('send-msg', payload);
-  });
+    const ticket = ticketControl.resolveTicket(escritorio);
+
+    socket.broadcast.emit('current-status', ticketControl.last4);
+
+    if (!ticket) {
+      callback({
+        ok: false,
+        msg: 'Ya no hay tickets pendientes'
+      });
+    } else {
+      socket.emit('pending-tickets', ticketControl.tickets.length);
+      socket.broadcast.emit('pending-tickets', ticketControl.tickets.length);
+      callback({
+        ok: true,
+        ticket
+      })
+    }
+  })
 }
